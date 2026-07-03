@@ -1,0 +1,2001 @@
+import React, { useState, useEffect, useRef } from "react";
+import {
+  Camera,
+  Trash2,
+  GraduationCap,
+  Leaf,
+  ShieldAlert,
+  Users,
+  CheckCircle2,
+  AlertTriangle,
+  MapPin,
+  Award,
+  TrendingUp,
+  Bell,
+  Plus,
+  Search,
+  Sparkles,
+  BookOpen,
+  ChevronRight,
+  User,
+  Clock,
+  Send,
+  Info,
+  Check,
+  X,
+  HelpCircle,
+  BarChart2,
+  Calendar,
+  ThumbsUp
+} from "lucide-react";
+import { GarbageReport, UserProfile, Badge, QuizQuestion, CleanlinessEvent } from "./types";
+import {
+  INITIAL_REPORTS,
+  ALL_BADGES,
+  EDUCATION_ARTICLES,
+  QUIZ_QUESTIONS,
+  CLEANLINESS_EVENTS,
+  INITIAL_LEADERBOARD
+} from "./data";
+
+// Sample preset garbage images for easy test testing
+const PRESET_IMAGES = [
+  {
+    name: "Plastic Bottle Pile",
+    category: "Recyclable",
+    url: "https://images.unsplash.com/photo-1611284446314-60a58ac0deb9?auto=format&fit=crop&q=80&w=600",
+    desc: "Discarded mineral water and beverage bottles accumulated on a public walkway."
+  },
+  {
+    name: "Kitchen Organic Waste",
+    category: "Biodegradable",
+    url: "https://images.unsplash.com/photo-1530587191325-3db32d826c18?auto=format&fit=crop&q=80&w=600",
+    desc: "Rotting vegetable peels, food scraps, and tea leaves spilled onto the street side."
+  },
+  {
+    name: "E-Waste & Electronics",
+    category: "Hazardous",
+    url: "https://images.unsplash.com/photo-1605600611283-c4530f61040f?auto=format&fit=crop&q=80&w=600",
+    desc: "Unusable remote controllers, old chargers, batteries, and discarded fluorescent bulbs."
+  }
+];
+
+export default function App() {
+  // --- Persistent & Local States ---
+  const [reports, setReports] = useState<GarbageReport[]>(() => {
+    const saved = localStorage.getItem("clean_india_reports");
+    return saved ? JSON.parse(saved) : INITIAL_REPORTS;
+  });
+
+  const [userProfile, setUserProfile] = useState<UserProfile>(() => {
+    const saved = localStorage.getItem("clean_india_user_profile");
+    if (saved) return JSON.parse(saved);
+    return {
+      id: "user-demo",
+      name: "Sanjay Kumar",
+      email: "sanjay.swachh@gmail.com",
+      role: "Volunteer",
+      points: 420,
+      level: 3,
+      unlockedBadgeIds: ["badge-1", "badge-4"],
+      joinedAt: "2026-06-15",
+      reportsSubmitted: 4,
+      reportsCleaned: 3
+    };
+  });
+
+  const [events, setEvents] = useState<CleanlinessEvent[]>(() => {
+    const saved = localStorage.getItem("clean_india_events");
+    return saved ? JSON.parse(saved) : CLEANLINESS_EVENTS;
+  });
+
+  const [notifications, setNotifications] = useState<Array<{ id: string; title: string; body: string; time: string; read: boolean }>>([
+    {
+      id: "notif-1",
+      title: "Cleanliness Drive Near You",
+      body: "Vasant Kunj Community Plog Run is scheduled for Sunday at 07:00 AM. Join in to earn +150 points!",
+      time: "2 hours ago",
+      read: false
+    },
+    {
+      id: "notif-2",
+      title: "Spot Cleaned Successfully! 🌿",
+      body: "The plastic pile reported at Sector 4 Dwarka has been cleaned by our volunteer team. You gained +100 points!",
+      time: "1 day ago",
+      read: true
+    }
+  ]);
+
+  const [currentTab, setCurrentTab] = useState<"dashboard" | "report" | "tasks" | "education" | "badges">("dashboard");
+
+  // Save changes to LocalStorage
+  useEffect(() => {
+    localStorage.setItem("clean_india_reports", JSON.stringify(reports));
+  }, [reports]);
+
+  useEffect(() => {
+    localStorage.setItem("clean_india_user_profile", JSON.stringify(userProfile));
+  }, [userProfile]);
+
+  useEffect(() => {
+    localStorage.setItem("clean_india_events", JSON.stringify(events));
+  }, [events]);
+
+  // --- Garbage Reporting Form States ---
+  const [photoInput, setPhotoInput] = useState<string>("");
+  const [descriptionInput, setDescriptionInput] = useState<string>("");
+  const [categoryInput, setCategoryInput] = useState<string>("Recyclable");
+  const [addressInput, setAddressInput] = useState<string>("");
+  const [gpsCoords, setGpsCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [isLocating, setIsLocating] = useState<boolean>(false);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [aiAnalysisResult, setAiAnalysisResult] = useState<GarbageReport["aiAnalysis"] | null>(null);
+  const [showAiAnalysisModal, setShowAiAnalysisModal] = useState<boolean>(false);
+
+  // --- Volunteer Task Management States ---
+  const [activeTaskFilter, setActiveTaskFilter] = useState<"all" | "pending" | "assigned" | "cleaned">("all");
+  const [selectedReportForTask, setSelectedReportForTask] = useState<GarbageReport | null>(null);
+  const [proofPhoto, setProofPhoto] = useState<string>("");
+  const [isSubmittingProof, setIsSubmittingProof] = useState<boolean>(false);
+
+  // --- Swachh Academy Quiz States ---
+  const [quizIndex, setQuizIndex] = useState<number>(0);
+  const [selectedQuizOption, setSelectedQuizOption] = useState<number | null>(null);
+  const [quizScore, setQuizScore] = useState<number>(0);
+  const [showQuizResult, setShowQuizResult] = useState<boolean>(false);
+  const [quizSubmitted, setQuizSubmitted] = useState<boolean>(false);
+  const [activeArticle, setActiveArticle] = useState<typeof EDUCATION_ARTICLES[0] | null>(null);
+
+  // --- Garbage Sorter Mini-game States ---
+  const [gameScore, setGameScore] = useState<number>(0);
+  const [currentTrashItem, setCurrentTrashItem] = useState<{ name: string; type: "Wet" | "Dry" | "Hazardous" }>({
+    name: "Banana Peel",
+    type: "Wet"
+  });
+  const [gameFeedback, setGameFeedback] = useState<string | null>(null);
+
+  const TRASH_ITEMS = [
+    { name: "Banana Peel", type: "Wet" as const },
+    { name: "Empty Soda Can", type: "Dry" as const },
+    { name: "Dead Batteries", type: "Hazardous" as const },
+    { name: "Cardboard Box", type: "Dry" as const },
+    { name: "Leftover Rice", type: "Wet" as const },
+    { name: "Broken LED Bulb", type: "Hazardous" as const },
+    { name: "Expired Medicines", type: "Hazardous" as const },
+    { name: "Newspaper Bundle", type: "Dry" as const },
+    { name: "Egg shells", type: "Wet" as const }
+  ];
+
+  const handleGameSort = (category: "Wet" | "Dry" | "Hazardous") => {
+    if (category === currentTrashItem.type) {
+      setGameScore(prev => {
+        const nextScore = prev + 10;
+        // Reward user if they hit milestones
+        if (nextScore % 50 === 0) {
+          triggerNotification(
+            "Game Master Reward! 🎮",
+            `You scored ${nextScore} points in Waste Sorter! Level up your waste knowledge.`
+          );
+          updatePoints(10);
+        }
+        return nextScore;
+      });
+      setGameFeedback("Correct! Splendid job sorting that. +10 XP");
+    } else {
+      setGameFeedback(`Incorrect. "${currentTrashItem.name}" is actually ${currentTrashItem.type} waste.`);
+    }
+
+    // Pick next trash item
+    setTimeout(() => {
+      const nextItem = TRASH_ITEMS[Math.floor(Math.random() * TRASH_ITEMS.length)];
+      setCurrentTrashItem(nextItem);
+      setGameFeedback(null);
+    }, 1800);
+  };
+
+  // --- Notification System Actions ---
+  const [showNotificationsDropdown, setShowNotificationsDropdown] = useState<boolean>(false);
+
+  const triggerNotification = (title: string, body: string) => {
+    const newNotif = {
+      id: "notif-" + Date.now(),
+      title,
+      body,
+      time: "Just now",
+      read: false
+    };
+    setNotifications(prev => [newNotif, ...prev]);
+
+    // HTML5 Notification fallback if allowed, but mostly we render beautifully in the UI
+    if ("Notification" in window && Notification.permission === "granted") {
+      new Notification(title, { body });
+    }
+  };
+
+  const markAllNotificationsRead = () => {
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+  };
+
+  // --- Geolocation Finder ---
+  const handleGetLocation = () => {
+    setIsLocating(true);
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setGpsCoords({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          });
+          // Perform a simulated reverse geocode to make it highly user-friendly
+          setAddressInput(`Near latitude ${position.coords.latitude.toFixed(4)}, longitude ${position.coords.longitude.toFixed(4)}`);
+          setIsLocating(false);
+          triggerNotification("GPS Signal Found 📍", "Location coordinates retrieved successfully.");
+        },
+        (error) => {
+          console.warn("Geolocation failed. Falling back to default Delhi Coordinates.", error);
+          // Fallback to Delhi coordinates
+          setGpsCoords({ lat: 28.6139, lng: 77.2090 });
+          setAddressInput("Central Secretariat, New Delhi, 110001");
+          setIsLocating(false);
+          triggerNotification("Location Warning", "Using municipal default GPS coordinates (Delhi Centre).");
+        }
+      );
+    } else {
+      setGpsCoords({ lat: 28.6139, lng: 77.2090 });
+      setAddressInput("Connaught Place, New Delhi");
+      setIsLocating(false);
+    }
+  };
+
+  // --- Reward / Points Helper ---
+  const updatePoints = (pointsToAdd: number) => {
+    setUserProfile(prev => {
+      const nextPoints = prev.points + pointsToAdd;
+      const nextLevel = Math.floor(nextPoints / 200) + 1;
+      let newlyUnlockedBadges: string[] = [...prev.unlockedBadgeIds];
+
+      // Badge check: Swachhta Soldier if > 500
+      if (nextPoints >= 500 && !newlyUnlockedBadges.includes("badge-5")) {
+        newlyUnlockedBadges.push("badge-5");
+        setTimeout(() => {
+          triggerNotification("Badge Unlocked! 🏆", "Congratulations! You earned the 'Swachhta Soldier' badge for exceeding 500 Swachh points.");
+        }, 1500);
+      }
+
+      return {
+        ...prev,
+        points: nextPoints,
+        level: Math.max(prev.level, nextLevel),
+        unlockedBadgeIds: newlyUnlockedBadges
+      };
+    });
+  };
+
+  // --- Photo Input Handling (Camera Capture simulation or image upload) ---
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPhotoInput(reader.result as string);
+        triggerNotification("Photo Attached 📸", "Ready for automated Swachh Bharat AI Classification.");
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const selectPresetImage = (preset: typeof PRESET_IMAGES[0]) => {
+    setPhotoInput(preset.url);
+    setCategoryInput(preset.category);
+    setDescriptionInput(preset.desc);
+    if (!addressInput) {
+      setAddressInput("Sector 15 Main Road Corridor, NCR");
+      setGpsCoords({ lat: 28.5835, lng: 77.3149 });
+    }
+    triggerNotification("Preset Loaded ✨", `Loaded sample: "${preset.name}"`);
+  };
+
+  // --- Submit Garbage Report (with backend Gemini API connection) ---
+  const handleReportSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!photoInput) {
+      alert("Please capture or upload a photo of the garbage spot.");
+      return;
+    }
+    if (!addressInput) {
+      alert("Please provide the location or click 'Get GPS' to locate.");
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch("/api/gemini/analyze-garbage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          image: photoInput,
+          description: descriptionInput,
+          category: categoryInput
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success || data.pointsReward) {
+        setAiAnalysisResult(data);
+        setShowAiAnalysisModal(true);
+
+        // Create the new report
+        const newReport: GarbageReport = {
+          id: `rep-${Date.now()}`,
+          address: addressInput,
+          latitude: gpsCoords?.lat || 28.6139,
+          longitude: gpsCoords?.lng || 77.2090,
+          photoUrl: photoInput,
+          description: descriptionInput || "Unspecified waste pile reported.",
+          category: data.detectedCategory || categoryInput,
+          status: "Pending",
+          severity: data.severity || "Medium",
+          pointsReward: data.pointsReward || 100,
+          reportedBy: userProfile.name,
+          reportedAt: new Date().toISOString(),
+          aiAnalysis: data
+        };
+
+        setReports(prev => [newReport, ...prev]);
+
+        // Reward report submission points
+        updatePoints(30); // Base reward for reporting, extra points awarded when cleaned
+
+        // Check badge reporting unlock
+        setUserProfile(prev => {
+          const nextCount = prev.reportsSubmitted + 1;
+          let newlyUnlockedBadges = [...prev.unlockedBadgeIds];
+          if (nextCount >= 1 && !newlyUnlockedBadges.includes("badge-1")) {
+            newlyUnlockedBadges.push("badge-1");
+            setTimeout(() => {
+              triggerNotification("Badge Unlocked! 🏆", "You earned the 'Green Reporter' badge for logging your first spot!");
+            }, 2000);
+          }
+          // Organic/compost badge if Biodegradable
+          if (newReport.category === "Biodegradable" && !newlyUnlockedBadges.includes("badge-4")) {
+            newlyUnlockedBadges.push("badge-4");
+            setTimeout(() => {
+              triggerNotification("Badge Unlocked! 🌿", "You earned 'Compost Pioneer' badge for flagging organic kitchen residues!");
+            }, 2500);
+          }
+          return {
+            ...prev,
+            reportsSubmitted: nextCount,
+            unlockedBadgeIds: newlyUnlockedBadges
+          };
+        });
+
+        triggerNotification(
+          "Report Registered! 📍",
+          `Cleanliness Spot reported near ${addressInput.split(",")[0]}. Thank you for keeping India clean!`
+        );
+
+        // Clear Form
+        setPhotoInput("");
+        setDescriptionInput("");
+        setAddressInput("");
+        setGpsCoords(null);
+      } else {
+        throw new Error(data.errorMsg || "Classification failed");
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert("Error contacting analysis servers. Please check your internet connection.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // --- Volunteer Event Join ---
+  const handleJoinEvent = (eventId: string) => {
+    setEvents(prev =>
+      prev.map(evt => {
+        if (evt.id === eventId) {
+          const alreadyJoined = evt.joinedUserIds.includes(userProfile.id);
+          let nextJoined = [...evt.joinedUserIds];
+          let nextCount = evt.volunteerCount;
+
+          if (alreadyJoined) {
+            nextJoined = nextJoined.filter(id => id !== userProfile.id);
+            nextCount = Math.max(0, nextCount - 1);
+            triggerNotification("Event Left", `You opted out of "${evt.title}".`);
+          } else {
+            nextJoined.push(userProfile.id);
+            nextCount = Math.min(evt.maxVolunteers, nextCount + 1);
+            updatePoints(50); // Immediate points for commitment
+            triggerNotification("Mission Joined! 🗓️", `You're signed up for "${evt.title}"! Earn points on participation.`);
+
+            // Check event badge
+            setUserProfile(u => {
+              let newlyUnlockedBadges = [...u.unlockedBadgeIds];
+              if (!newlyUnlockedBadges.includes("badge-6")) {
+                newlyUnlockedBadges.push("badge-6");
+                setTimeout(() => {
+                  triggerNotification("Badge Unlocked! 🏆", "You unlocked 'Community Organizer' badge for joining local drives!");
+                }, 2000);
+              }
+              return { ...u, unlockedBadgeIds: newlyUnlockedBadges };
+            });
+          }
+
+          return { ...evt, joinedUserIds: nextJoined, volunteerCount: nextCount };
+        }
+        return evt;
+      })
+    );
+  };
+
+  // --- Volunteer Task Claims & Proof Submissions ---
+  const handleClaimSpot = (reportId: string) => {
+    setReports(prev =>
+      prev.map(rep => {
+        if (rep.id === reportId) {
+          triggerNotification("Spot Claimed 🤝", `You took up the cleaning task at ${rep.address.split(",")[0]}.`);
+          return {
+            ...rep,
+            status: "Assigned",
+            assignedVolunteerId: userProfile.id,
+            assignedVolunteerName: userProfile.name
+          };
+        }
+        return rep;
+      })
+    );
+  };
+
+  const handleOpenProofModal = (report: GarbageReport) => {
+    setSelectedReportForTask(report);
+    setProofPhoto("");
+  };
+
+  const handleProofPhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setProofPhoto(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSubmitCleanupProof = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!proofPhoto) {
+      alert("Please upload a photo showing the clean spot as proof.");
+      return;
+    }
+    if (!selectedReportForTask) return;
+
+    setIsSubmittingProof(true);
+
+    // Simulate validation delay
+    setTimeout(() => {
+      const reportId = selectedReportForTask.id;
+      const pointsReward = selectedReportForTask.pointsReward;
+
+      // Update report status
+      setReports(prev =>
+        prev.map(rep => {
+          if (rep.id === reportId) {
+            return {
+              ...rep,
+              status: "Cleaned"
+            };
+          }
+          return rep;
+        })
+      );
+
+      // Reward points & updates
+      updatePoints(pointsReward);
+      setUserProfile(prev => {
+        const nextCleaned = prev.reportsCleaned + 1;
+        let newlyUnlockedBadges = [...prev.unlockedBadgeIds];
+
+        if (nextCleaned >= 1 && !newlyUnlockedBadges.includes("badge-2")) {
+          newlyUnlockedBadges.push("badge-2");
+          setTimeout(() => {
+            triggerNotification("Badge Unlocked! 🏆", "You earned 'Swachh Hero' badge for completing your first cleanup drive!");
+          }, 1500);
+        }
+
+        return {
+          ...prev,
+          reportsCleaned: nextCleaned,
+          unlockedBadgeIds: newlyUnlockedBadges
+        };
+      });
+
+      triggerNotification(
+        "Mission Accomplished! 🎉",
+        `Cleanliness verified at ${selectedReportForTask.address.split(",")[0]}! Gained +${pointsReward} Swachh points.`
+      );
+
+      setIsSubmittingProof(false);
+      setSelectedReportForTask(null);
+    }, 1500);
+  };
+
+  // --- Swachh Quiz Submission ---
+  const handleQuizAnswerSelect = (optionIdx: number) => {
+    if (quizSubmitted) return;
+    setSelectedQuizOption(optionIdx);
+  };
+
+  const handleQuizNext = () => {
+    if (selectedQuizOption === null) return;
+
+    // Evaluate answer
+    const currentQ = QUIZ_QUESTIONS[quizIndex];
+    const isCorrect = selectedQuizOption === currentQ.correctAnswerIndex;
+
+    if (isCorrect) {
+      setQuizScore(prev => prev + 1);
+    }
+
+    setQuizSubmitted(true);
+  };
+
+  const handleNextQuestion = () => {
+    setSelectedQuizOption(null);
+    setQuizSubmitted(false);
+
+    if (quizIndex < QUIZ_QUESTIONS.length - 1) {
+      setQuizIndex(prev => prev + 1);
+    } else {
+      setShowQuizResult(true);
+
+      // Award points on quiz completion
+      const totalGained = quizScore * 20; // 20 points per correct answer
+      updatePoints(totalGained);
+
+      // If perfect score, unlock Eco Scholar badge
+      if (quizScore === QUIZ_QUESTIONS.length) {
+        setUserProfile(prev => {
+          let newlyUnlockedBadges = [...prev.unlockedBadgeIds];
+          if (!newlyUnlockedBadges.includes("badge-3")) {
+            newlyUnlockedBadges.push("badge-3");
+            setTimeout(() => {
+              triggerNotification("Perfect Quiz Score! 🏆", "You scored 5/5 and unlocked 'Eco Scholar' badge!");
+            }, 2000);
+          }
+          return { ...prev, unlockedBadgeIds: newlyUnlockedBadges };
+        });
+      }
+
+      triggerNotification("Quiz Finished 🎓", `You scored ${quizScore}/${QUIZ_QUESTIONS.length}! Points added: +${totalGained}`);
+    }
+  };
+
+  const restartQuiz = () => {
+    setQuizIndex(0);
+    setSelectedQuizOption(null);
+    setQuizScore(0);
+    setQuizSubmitted(false);
+    setShowQuizResult(false);
+  };
+
+  // --- Calculate stats for Dashboard Progress ---
+  const totalCleaned = reports.filter(r => r.status === "Cleaned").length;
+  const totalReportsCount = reports.length;
+  const hygienePercentage = totalReportsCount > 0 ? Math.round((totalCleaned / totalReportsCount) * 100) : 100;
+
+  return (
+    <div className="min-h-screen bg-stone-50 text-stone-950 font-sans selection:bg-emerald-200">
+      
+      {/* Top Banner & Header - Editorial Aesthetic style */}
+      <div className="bg-emerald-950 text-emerald-100 py-2.5 px-4 text-center text-xs font-mono tracking-wider flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span>SWACHH BHARAT MISSION ONLINE PORTAL • ESTD 2014</span>
+        </div>
+        <div className="hidden md:flex gap-4 items-center">
+          <span>ACTIVE DEPUTY: {userProfile.name} (Lvl {userProfile.level})</span>
+          <span>GPS COMPLIANT • SECURE API</span>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        
+        {/* Editorial Main Header */}
+        <header className="flex flex-col md:flex-row md:justify-between md:items-baseline border-b-2 border-emerald-900/10 pb-5 mb-8 gap-4">
+          <div className="space-y-1">
+            <h1 className="text-4xl sm:text-5xl font-serif font-black tracking-tight text-emerald-900 uppercase leading-none">
+              Clean India
+            </h1>
+            <p className="font-sans text-xs tracking-[0.2em] uppercase text-emerald-700 font-bold italic">
+              The Digital Swachh Bharat Initiative
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-4 sm:gap-6">
+            
+            {/* Quick Points Widget */}
+            <div className="bg-white border border-emerald-900/10 rounded-2xl p-3 flex items-center gap-3 shadow-xs">
+              <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-800 font-bold">
+                🏆
+              </div>
+              <div>
+                <span className="block text-[10px] uppercase font-mono text-stone-500 tracking-tight">Impact Balance</span>
+                <span className="block text-lg font-serif font-black text-emerald-950">{userProfile.points} Pts</span>
+              </div>
+            </div>
+
+            {/* Profile Level */}
+            <div className="text-right hidden sm:block">
+              <span className="block font-sans text-[10px] uppercase tracking-wider text-stone-500">Citizen Level</span>
+              <span className="block text-xl font-serif font-bold text-emerald-800">Swachh Ranger IV</span>
+            </div>
+
+            {/* Notification Bell Widget */}
+            <div className="relative">
+              <button
+                onClick={() => {
+                  setShowNotificationsDropdown(!showNotificationsDropdown);
+                  if (!showNotificationsDropdown) markAllNotificationsRead();
+                }}
+                className="w-11 h-11 bg-white hover:bg-emerald-50 border border-emerald-900/10 rounded-full flex items-center justify-center text-stone-700 transition-colors cursor-pointer relative"
+              >
+                <Bell className="w-5 h-5" />
+                {notifications.some(n => !n.read) && (
+                  <span className="absolute top-2 right-2 w-2.5 h-2.5 bg-red-500 rounded-full border border-white"></span>
+                )}
+              </button>
+
+              {/* Notifications Dropdown */}
+              {showNotificationsDropdown && (
+                <div className="absolute right-0 mt-3 w-80 bg-white border border-emerald-900/10 rounded-2xl shadow-xl z-50 overflow-hidden">
+                  <div className="px-4 py-3 bg-emerald-900 text-white flex justify-between items-center">
+                    <span className="font-serif font-bold text-sm">Citizen Bulletins</span>
+                    <button
+                      onClick={() => setShowNotificationsDropdown(false)}
+                      className="text-white/80 hover:text-white"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="divide-y divide-stone-100 max-h-72 overflow-y-auto">
+                    {notifications.length === 0 ? (
+                      <div className="p-4 text-center text-stone-400 text-xs">No active alerts at this time.</div>
+                    ) : (
+                      notifications.map(n => (
+                        <div key={n.id} className={`p-4 hover:bg-stone-50 transition-colors ${!n.read ? "bg-emerald-50/40" : ""}`}>
+                          <div className="flex justify-between items-start mb-1">
+                            <span className="font-bold text-xs text-stone-800">{n.title}</span>
+                            <span className="text-[9px] text-stone-400 font-mono">{n.time}</span>
+                          </div>
+                          <p className="text-xs text-stone-600 leading-snug">{n.body}</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  <div className="p-2 bg-stone-50 text-center border-t border-stone-100">
+                    <button
+                      onClick={() => {
+                        triggerNotification(
+                          "Local Alert 📢",
+                          "Cleanliness inspectors are visiting Vasant Kunj Sector 4 today to verify current trash cans."
+                        );
+                      }}
+                      className="text-[10px] font-mono font-bold uppercase text-emerald-800 hover:underline"
+                    >
+                      💡 Trigger Demo Push Notification
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* User Avatar */}
+            <div className="h-11 w-11 bg-emerald-900 rounded-full flex items-center justify-center text-white font-serif font-bold border-2 border-emerald-500 shadow-md">
+              SK
+            </div>
+          </div>
+        </header>
+
+        {/* --- Main App Navigation --- */}
+        <nav className="mb-8 flex flex-wrap gap-2 p-1.5 bg-emerald-100/40 rounded-2xl border border-emerald-900/5 max-w-3xl">
+          <button
+            onClick={() => setCurrentTab("dashboard")}
+            className={`flex-1 py-3 px-4 rounded-xl text-xs uppercase tracking-wider font-bold transition-all cursor-pointer ${
+              currentTab === "dashboard"
+                ? "bg-emerald-800 text-white shadow-md font-extrabold"
+                : "text-stone-600 hover:text-emerald-900 hover:bg-white/50"
+            }`}
+          >
+            Dashboard
+          </button>
+          <button
+            onClick={() => setCurrentTab("report")}
+            className={`flex-1 py-3 px-4 rounded-xl text-xs uppercase tracking-wider font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+              currentTab === "report"
+                ? "bg-emerald-800 text-white shadow-md font-extrabold"
+                : "text-stone-600 hover:text-emerald-900 hover:bg-white/50"
+            }`}
+          >
+            <Camera className="w-3.5 h-3.5" />
+            Report Spot
+          </button>
+          <button
+            onClick={() => setCurrentTab("tasks")}
+            className={`flex-1 py-3 px-4 rounded-xl text-xs uppercase tracking-wider font-bold transition-all cursor-pointer ${
+              currentTab === "tasks"
+                ? "bg-emerald-800 text-white shadow-md font-extrabold"
+                : "text-stone-600 hover:text-emerald-900 hover:bg-white/50"
+            }`}
+          >
+            Clean Missions
+          </button>
+          <button
+            onClick={() => setCurrentTab("education")}
+            className={`flex-1 py-3 px-4 rounded-xl text-xs uppercase tracking-wider font-bold transition-all cursor-pointer ${
+              currentTab === "education"
+                ? "bg-emerald-800 text-white shadow-md font-extrabold"
+                : "text-stone-600 hover:text-emerald-900 hover:bg-white/50"
+            }`}
+          >
+            Academy
+          </button>
+          <button
+            onClick={() => setCurrentTab("badges")}
+            className={`flex-1 py-3 px-4 rounded-xl text-xs uppercase tracking-wider font-bold transition-all cursor-pointer ${
+              currentTab === "badges"
+                ? "bg-emerald-800 text-white shadow-md font-extrabold"
+                : "text-stone-600 hover:text-emerald-900 hover:bg-white/50"
+            }`}
+          >
+            Rewards
+          </button>
+        </nav>
+
+        {/* --- VIEW 1: DASHBOARD --- */}
+        {currentTab === "dashboard" && (
+          <div className="space-y-8 animate-fade-in">
+            {/* Bento Grid Highlights */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+              
+              {/* Main App Hero Card */}
+              <div className="md:col-span-8 bg-emerald-900 text-emerald-50 rounded-[2rem] p-6 sm:p-8 relative overflow-hidden flex flex-col justify-between shadow-xl min-h-[250px]">
+                <div className="relative z-10 max-w-lg">
+                  <span className="inline-block px-3 py-1 rounded-full bg-emerald-800 text-emerald-300 text-[10px] font-mono uppercase tracking-wider mb-4 border border-emerald-700">
+                    Swachh Bharat Citizen Hub
+                  </span>
+                  <h2 className="text-3xl sm:text-4xl font-serif font-black leading-tight mb-3">
+                    Every Citizen is a Cleanliness Guardian.
+                  </h2>
+                  <p className="text-sm text-emerald-200/95 leading-relaxed mb-6 font-light">
+                    Transform your community by snapping photos of dump-yards. Our integrated Gemini AI automatically categorizes waste, grades urgency, and dispatches dedicated local volunteer squads.
+                  </p>
+                  <button
+                    onClick={() => setCurrentTab("report")}
+                    className="bg-white hover:bg-emerald-50 text-emerald-950 font-sans text-xs uppercase tracking-widest font-black px-6 py-3.5 rounded-xl transition-all shadow-md inline-flex items-center gap-2 cursor-pointer"
+                  >
+                    <Camera className="w-4 h-4" />
+                    Report Dirty Spot Now
+                  </button>
+                </div>
+                <div className="absolute -bottom-10 -right-10 w-48 h-48 bg-emerald-800 rounded-full blur-3xl opacity-50"></div>
+                <div className="absolute top-10 right-10 opacity-10 font-serif text-[180px] select-none pointer-events-none leading-none">
+                  🇮🇳
+                </div>
+              </div>
+
+              {/* District Progress Widget */}
+              <div className="md:col-span-4 bg-white border border-emerald-900/10 rounded-[2rem] p-6 flex flex-col justify-between shadow-sm">
+                <div>
+                  <div className="flex justify-between items-start mb-4">
+                    <h3 className="text-xs font-sans uppercase tracking-widest text-emerald-800 font-black">
+                      Hygiene Progress
+                    </h3>
+                    <span className="text-xs bg-emerald-100 text-emerald-800 font-mono px-2 py-0.5 rounded-md font-bold">
+                      NCR Zone
+                    </span>
+                  </div>
+                  
+                  {/* Dynamic Progress Indicator */}
+                  <div className="flex items-baseline gap-2 mb-2">
+                    <span className="text-5xl font-serif font-black text-emerald-950 italic">
+                      {hygienePercentage}%
+                    </span>
+                    <span className="text-xs font-sans uppercase font-bold text-emerald-700">
+                      Cleaned Spots
+                    </span>
+                  </div>
+                  
+                  <div className="w-full bg-stone-100 h-2.5 rounded-full overflow-hidden mb-6">
+                    <div
+                      className="bg-emerald-600 h-full rounded-full transition-all duration-1000"
+                      style={{ width: `${hygienePercentage}%` }}
+                    ></div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 border-t border-stone-100 pt-4">
+                    <div>
+                      <span className="block text-xl font-bold font-serif text-stone-800">{totalReportsCount}</span>
+                      <span className="text-[10px] font-sans uppercase text-stone-500 font-semibold">Total Reported</span>
+                    </div>
+                    <div>
+                      <span className="block text-xl font-bold font-serif text-emerald-700">{totalCleaned}</span>
+                      <span className="text-[10px] font-sans uppercase text-stone-500 font-semibold">Verified Cleaned</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-emerald-50 rounded-xl p-3 flex items-center gap-3 mt-4">
+                  <div className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></div>
+                  <span className="text-[11px] text-emerald-950 leading-tight">
+                    <strong>8.4 Tons</strong> of public garbage composted & recycled this term.
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Middle Section: Active Swachh Spots and Quick Info */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+              
+              {/* Active Garbage Spot Feed */}
+              <div className="lg:col-span-8 space-y-6">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-xs font-sans uppercase tracking-[0.2em] font-black text-emerald-900 border-l-4 border-emerald-600 pl-3">
+                    Active Citizen Reports
+                  </h3>
+                  <button
+                    onClick={() => setCurrentTab("tasks")}
+                    className="text-xs font-bold text-emerald-800 hover:text-emerald-950 flex items-center gap-1 uppercase tracking-wider"
+                  >
+                    View map & tasks <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                  {reports.slice(0, 2).map((report) => (
+                    <div
+                      key={report.id}
+                      className="bg-white rounded-3xl overflow-hidden border border-emerald-900/5 shadow-xs flex flex-col justify-between"
+                    >
+                      <div className="relative aspect-video bg-stone-100 overflow-hidden">
+                        {report.photoUrl ? (
+                          <img
+                            src={report.photoUrl}
+                            alt="garbage report"
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-stone-400">
+                            No Photo Uploaded
+                          </div>
+                        )}
+                        <span className={`absolute top-3 right-3 text-[10px] px-2.5 py-1 rounded-full uppercase tracking-wider font-bold ${
+                          report.status === "Cleaned"
+                            ? "bg-emerald-100 text-emerald-800"
+                            : report.status === "Assigned"
+                            ? "bg-amber-100 text-amber-800"
+                            : "bg-red-100 text-red-800"
+                        }`}>
+                          {report.status}
+                        </span>
+                        <span className="absolute bottom-3 left-3 bg-stone-900/80 text-white text-[10px] font-mono px-2 py-0.5 rounded">
+                          {report.category}
+                        </span>
+                      </div>
+
+                      <div className="p-5 flex-1 flex flex-col justify-between">
+                        <div>
+                          <div className="flex items-start gap-1.5 text-stone-500 text-xs mb-2">
+                            <MapPin className="w-3.5 h-3.5 shrink-0 text-emerald-700" />
+                            <span className="line-clamp-1">{report.address}</span>
+                          </div>
+                          <h4 className="font-serif font-bold text-lg text-stone-900 leading-tight mb-2 line-clamp-2">
+                            {report.description}
+                          </h4>
+                          <p className="text-xs text-stone-500 font-mono mb-4">
+                            Reported by: {report.reportedBy} on {new Date(report.reportedAt).toLocaleDateString()}
+                          </p>
+                        </div>
+
+                        <div className="pt-3 border-t border-stone-100 flex items-center justify-between">
+                          <span className="text-xs text-stone-600 font-bold">
+                            Reward: <span className="text-emerald-800 font-mono font-black">+{report.pointsReward} Pts</span>
+                          </span>
+
+                          {report.status === "Pending" ? (
+                            <button
+                              onClick={() => handleClaimSpot(report.id)}
+                              className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-[11px] uppercase tracking-wider font-extrabold px-3 py-1.5 rounded-lg cursor-pointer transition-colors"
+                            >
+                              Claim Task
+                            </button>
+                          ) : report.status === "Assigned" ? (
+                            <span className="text-[11px] text-amber-800 font-medium italic">
+                              Claimed by: {report.assignedVolunteerName}
+                            </span>
+                          ) : (
+                            <div className="flex items-center gap-1 text-emerald-700 text-xs font-bold">
+                              <CheckCircle2 className="w-4 h-4" />
+                              <span>Verified Cleaned</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Sidebar: Next Event & Leaderboard Preview */}
+              <div className="lg:col-span-4 space-y-6">
+                <div>
+                  <h3 className="text-xs font-sans uppercase tracking-[0.2em] font-black text-emerald-900 mb-4">
+                    Next Cleanup Event
+                  </h3>
+                  
+                  {/* Dynamic Upcoming Event card */}
+                  <div className="bg-stone-950 text-stone-100 p-6 rounded-3xl relative overflow-hidden shadow-md">
+                    <span className="text-[10px] font-mono text-emerald-400 uppercase tracking-widest block mb-1">
+                      Upcoming Swachh drive
+                    </span>
+                    <h4 className="text-xl font-serif font-bold mb-2">
+                      {events[0]?.title || "Mega City Cleanathon"}
+                    </h4>
+                    <p className="text-stone-300 text-xs mb-4 line-clamp-2">
+                      {events[0]?.description}
+                    </p>
+                    
+                    <div className="space-y-2 mb-5 text-xs text-stone-400 font-mono">
+                      <div className="flex items-center gap-2">
+                        <Clock className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>{events[0]?.date} • {events[0]?.time}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <MapPin className="w-3.5 h-3.5 text-emerald-400" />
+                        <span className="truncate">{events[0]?.location}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-between items-center">
+                      <span className="text-emerald-400 font-bold text-xs">
+                        +{events[0]?.pointsReward} Points
+                      </span>
+                      <button
+                        onClick={() => handleJoinEvent(events[0].id)}
+                        className={`font-sans text-[11px] uppercase tracking-widest font-black px-4 py-2 rounded-xl transition-all cursor-pointer ${
+                          events[0]?.joinedUserIds.includes(userProfile.id)
+                            ? "bg-red-800 text-white"
+                            : "bg-emerald-600 hover:bg-emerald-500 text-white"
+                        }`}
+                      >
+                        {events[0]?.joinedUserIds.includes(userProfile.id) ? "Opt Out" : "Join Drive"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Micro Leaderboard */}
+                <div>
+                  <h3 className="text-xs font-sans uppercase tracking-[0.2em] font-black text-emerald-900 mb-4">
+                    Swachh Leaderboard
+                  </h3>
+                  <div className="bg-white rounded-3xl border border-emerald-900/5 p-5 shadow-xs space-y-3">
+                    {INITIAL_LEADERBOARD.slice(0, 3).map((lead) => (
+                      <div key={lead.rank} className="flex items-center justify-between py-1 border-b border-stone-50 last:border-0">
+                        <div className="flex items-center gap-3">
+                          <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                            lead.rank === 1 ? "bg-yellow-100 text-yellow-800" : "bg-stone-100 text-stone-600"
+                          }`}>
+                            {lead.rank}
+                          </span>
+                          <div>
+                            <span className="font-bold text-xs text-stone-800 block">{lead.name}</span>
+                            <span className="text-[10px] text-stone-400 font-mono">Level {lead.level}</span>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <span className="font-mono font-bold text-xs text-emerald-800">{lead.points} Pts</span>
+                          <span className="block text-[9px] text-stone-400 uppercase">{lead.reportsCleaned} cleaned</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            {/* Waste Sorter Educational Mini Game on Dashboard */}
+            <div className="bg-emerald-100/50 rounded-[2rem] p-6 border border-emerald-900/5">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+                <div>
+                  <span className="text-[10px] font-mono text-emerald-800 uppercase tracking-widest block font-bold">
+                    Interactive Mini-Game
+                  </span>
+                  <h3 className="text-2xl font-serif font-black text-emerald-950">
+                    Swachh Bin-Sorter Practice
+                  </h3>
+                  <p className="text-xs text-stone-600">
+                    Perfect your waste segregation reflexes. Sort each item into its designated Swachh color bin!
+                  </p>
+                </div>
+                <div className="bg-white px-4 py-2 rounded-xl shadow-xs border border-emerald-900/5">
+                  <span className="text-xs font-bold block text-stone-500 uppercase tracking-tight">Mini Game Score</span>
+                  <span className="text-lg font-mono font-black text-emerald-900">{gameScore} Points</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
+                
+                {/* Simulated Trash Item Card */}
+                <div className="md:col-span-4 bg-white p-6 rounded-2xl border border-emerald-900/10 text-center shadow-xs">
+                  <span className="text-xs font-mono uppercase text-stone-400">Current Waste Item</span>
+                  <div className="my-4">
+                    <span className="inline-block p-4 bg-emerald-50 rounded-full text-3xl mb-2">
+                      🗑️
+                    </span>
+                    <h4 className="text-xl font-serif font-bold text-stone-900">{currentTrashItem.name}</h4>
+                  </div>
+                  {gameFeedback ? (
+                    <p className={`text-xs font-semibold p-2 rounded-lg ${
+                      gameFeedback.startsWith("Correct") ? "bg-emerald-50 text-emerald-800" : "bg-red-50 text-red-800"
+                    }`}>
+                      {gameFeedback}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-stone-400 italic">Where does this go?</p>
+                  )}
+                </div>
+
+                {/* Dusty Sorting Dustbins Buttons */}
+                <div className="md:col-span-8 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  {/* Green Bin */}
+                  <button
+                    onClick={() => handleGameSort("Wet")}
+                    className="bg-emerald-800 text-white p-5 rounded-2xl flex flex-col items-center gap-2 hover:bg-emerald-900 transition-all shadow-xs group cursor-pointer"
+                  >
+                    <div className="w-12 h-12 bg-emerald-900 rounded-full flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
+                      🟢
+                    </div>
+                    <span className="font-serif font-bold text-lg">Wet Waste</span>
+                    <span className="text-[10px] opacity-80 uppercase tracking-widest font-mono">Green Bin</span>
+                  </button>
+
+                  {/* Blue Bin */}
+                  <button
+                    onClick={() => handleGameSort("Dry")}
+                    className="bg-sky-800 text-white p-5 rounded-2xl flex flex-col items-center gap-2 hover:bg-sky-900 transition-all shadow-xs group cursor-pointer"
+                  >
+                    <div className="w-12 h-12 bg-sky-900 rounded-full flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
+                      🔵
+                    </div>
+                    <span className="font-serif font-bold text-lg">Dry Waste</span>
+                    <span className="text-[10px] opacity-80 uppercase tracking-widest font-mono">Blue Bin</span>
+                  </button>
+
+                  {/* Red/Hazardous Bin */}
+                  <button
+                    onClick={() => handleGameSort("Hazardous")}
+                    className="bg-red-800 text-white p-5 rounded-2xl flex flex-col items-center gap-2 hover:bg-red-900 transition-all shadow-xs group cursor-pointer"
+                  >
+                    <div className="w-12 h-12 bg-red-900 rounded-full flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
+                      🔴
+                    </div>
+                    <span className="font-serif font-bold text-lg">Hazardous</span>
+                    <span className="text-[10px] opacity-80 uppercase tracking-widest font-mono">Red/Black Bin</span>
+                  </button>
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+        )}
+
+        {/* --- VIEW 2: REPORT A SPOT --- */}
+        {currentTab === "report" && (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-fade-in">
+            
+            {/* Left side: Guide & Demo preset uploaders */}
+            <div className="lg:col-span-5 space-y-6">
+              <div className="bg-emerald-950 text-white rounded-3xl p-6 shadow-md">
+                <span className="text-emerald-400 font-mono text-[10px] uppercase tracking-wider block mb-1">AI Swachh Inspector</span>
+                <h3 className="text-2xl font-serif font-bold mb-3">AI Garbage Classification</h3>
+                <p className="text-xs text-stone-300 leading-relaxed mb-4">
+                  Powered by Google Gemini 1.5 Flash. Upload a live smartphone photograph or click one of our test preset cases below to experience automated waste detection and severity categorization immediately.
+                </p>
+
+                <div className="space-y-3">
+                  <span className="text-[10px] font-mono uppercase tracking-widest text-emerald-400 block font-bold">
+                    Test Immediately With Quick Presets
+                  </span>
+                  {PRESET_IMAGES.map((img, i) => (
+                    <button
+                      key={i}
+                      onClick={() => selectPresetImage(img)}
+                      className="w-full bg-emerald-900/50 border border-emerald-800 text-left p-3 rounded-xl hover:bg-emerald-800 transition-colors flex gap-3 items-center"
+                    >
+                      <img
+                        src={img.url}
+                        alt="preset"
+                        className="w-12 h-12 object-cover rounded-lg shrink-0 border border-emerald-700"
+                      />
+                      <div className="truncate">
+                        <span className="block text-xs font-bold font-serif text-white">{img.name}</span>
+                        <span className="block text-[10px] text-emerald-300 truncate">{img.desc}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Citizen guidelines */}
+              <div className="bg-white border border-emerald-900/10 rounded-3xl p-6 shadow-xs">
+                <h4 className="text-xs uppercase tracking-widest text-emerald-900 font-black mb-3">
+                  Report Accuracy Policy
+                </h4>
+                <ul className="text-xs text-stone-600 space-y-2 list-disc pl-4">
+                  <li>Ensure garbage is clearly visible and occupies the central 60% of the photograph frame.</li>
+                  <li>Click "Get GPS Coordinates" directly next to the waste heap to alert our localized sanitation trucks.</li>
+                  <li>Avoid uploading downloaded images; only real, authentic photos will successfully clear AI analysis and score points.</li>
+                </ul>
+              </div>
+            </div>
+
+            {/* Right side: Interactive Form */}
+            <form onSubmit={handleReportSubmit} className="lg:col-span-7 bg-white border border-emerald-900/10 rounded-[2rem] p-6 sm:p-8 shadow-sm space-y-6">
+              <div className="border-b border-stone-100 pb-4">
+                <h3 className="font-serif font-black text-2xl text-emerald-950">File Citizen Report</h3>
+                <p className="text-xs text-stone-500">Submit a photo and locations parameters to schedule a clean-up squad.</p>
+              </div>
+
+              {/* Photo Input Selector */}
+              <div className="space-y-2">
+                <label className="block text-xs uppercase tracking-widest text-stone-500 font-bold">
+                  Attach Spot Photo *
+                </label>
+                
+                {photoInput ? (
+                  <div className="relative aspect-video rounded-2xl overflow-hidden bg-stone-100 border border-stone-200 group">
+                    <img
+                      src={photoInput}
+                      alt="captured trash pile"
+                      className="w-full h-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setPhotoInput("")}
+                      className="absolute top-3 right-3 bg-red-900/90 text-white p-2 rounded-full hover:bg-red-800 transition-colors"
+                      title="Remove image"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                    <div className="absolute bottom-0 inset-x-0 bg-stone-900/60 p-2.5 text-center text-[10px] text-white font-mono">
+                      Image stored locally in secure citizen session.
+                    </div>
+                  </div>
+                ) : (
+                  <div className="border-2 border-dashed border-stone-300 rounded-2xl p-8 text-center bg-stone-50 hover:bg-emerald-50/50 hover:border-emerald-600 transition-all flex flex-col items-center justify-center cursor-pointer relative">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handlePhotoUpload}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    />
+                    <Camera className="w-10 h-10 text-stone-400 mb-3" />
+                    <span className="font-serif font-bold text-sm text-stone-800 block">Take Photo or Upload Image</span>
+                    <span className="text-[10px] text-stone-500 mt-1 block">Supports JPG, PNG, WEBP up to 8MB</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Interactive Category and Description */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs uppercase tracking-widest text-stone-500 font-bold mb-1.5">
+                    Suggested Trash Class
+                  </label>
+                  <select
+                    value={categoryInput}
+                    onChange={(e) => setCategoryInput(e.target.value)}
+                    className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2.5 text-xs text-stone-800 focus:outline-emerald-600 focus:bg-white"
+                  >
+                    <option value="Recyclable">Dry Waste / Recyclable (Bottles, Paper)</option>
+                    <option value="Biodegradable">Wet Waste / Organic (Food, Leaves)</option>
+                    <option value="Hazardous">Hazardous / Medical (Needles, Paint)</option>
+                    <option value="E-Waste">Electronics / Hardware (Batteries, Wire)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs uppercase tracking-widest text-stone-500 font-bold mb-1.5">
+                    Location GPS Verification *
+                  </label>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={handleGetLocation}
+                      className={`flex-1 flex items-center justify-center gap-2 text-xs py-2.5 px-3 rounded-xl border border-stone-300 font-bold transition-all cursor-pointer ${
+                        gpsCoords ? "bg-emerald-50 text-emerald-800 border-emerald-400" : "bg-stone-100 hover:bg-stone-200"
+                      }`}
+                    >
+                      <MapPin className={`w-4 h-4 ${isLocating ? "animate-spin" : ""}`} />
+                      {isLocating ? "Acquiring..." : gpsCoords ? "GPS Active ✓" : "Fetch Location GPS"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Detailed Address Text Field */}
+              <div>
+                <label className="block text-xs uppercase tracking-widest text-stone-500 font-bold mb-1.5">
+                  Nearest Landmarks / Street Address *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Opposite State Bank ATM, Sector 15 Market Main Road"
+                  value={addressInput}
+                  onChange={(e) => setAddressInput(e.target.value)}
+                  className="w-full bg-stone-50 border border-stone-300 rounded-xl p-3 text-xs text-stone-800 focus:outline-emerald-600 focus:bg-white"
+                />
+              </div>
+
+              {/* Spot Description */}
+              <div>
+                <label className="block text-xs uppercase tracking-widest text-stone-500 font-bold mb-1.5">
+                  Spot Observations & Comments
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="Describe the pile. Does it contain construction rubble, plastics, is it overflowing, or blocking walking paths?"
+                  value={descriptionInput}
+                  onChange={(e) => setDescriptionInput(e.target.value)}
+                  className="w-full bg-stone-50 border border-stone-300 rounded-xl p-3 text-xs text-stone-800 focus:outline-emerald-600 focus:bg-white"
+                ></textarea>
+              </div>
+
+              {/* Action Buttons */}
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className={`w-full bg-emerald-800 text-white font-sans text-xs uppercase tracking-widest font-black py-4 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                  isSubmitting ? "opacity-60 cursor-not-allowed" : "hover:bg-emerald-900"
+                }`}
+              >
+                {isSubmitting ? (
+                  <>
+                    <Sparkles className="w-4 h-4 animate-spin" />
+                    <span>Gemini AI Analyzing & Categorizing...</span>
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4" />
+                    <span>Submit & Analyze Garbage Spot</span>
+                  </>
+                )}
+              </button>
+            </form>
+
+          </div>
+        )}
+
+        {/* --- VIEW 3: CLEAN MISSIONS (TASKS) --- */}
+        {currentTab === "tasks" && (
+          <div className="space-y-6 animate-fade-in">
+            
+            {/* Mission banner */}
+            <div className="bg-white border border-emerald-900/10 rounded-[2rem] p-6 sm:p-8 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+              <div>
+                <span className="inline-block px-3 py-1 rounded-full bg-amber-50 text-amber-800 text-[10px] font-mono uppercase tracking-wider mb-2 border border-amber-200">
+                  Swachhta Shramdaan Panel
+                </span>
+                <h3 className="text-3xl font-serif font-bold text-stone-900">Volunteer Mission Center</h3>
+                <p className="text-xs text-stone-500 max-w-xl">
+                  As a Swachh Volunteer, you can browse reported garbage locations, claim tasks, clean them with local friends, and submit photographic proof to verify your efforts and unlock rare badges!
+                </p>
+              </div>
+
+              <div className="flex gap-4 items-center shrink-0">
+                <div className="text-center bg-emerald-50 py-3 px-5 rounded-2xl border border-emerald-900/5">
+                  <span className="block text-2xl font-serif font-black text-emerald-900">{reports.filter(r => r.status === "Assigned").length}</span>
+                  <span className="text-[10px] font-mono text-emerald-700 uppercase">My Claims</span>
+                </div>
+                <div className="text-center bg-stone-100 py-3 px-5 rounded-2xl">
+                  <span className="block text-2xl font-serif font-black text-stone-800">{userProfile.reportsCleaned}</span>
+                  <span className="text-[10px] font-mono text-stone-500 uppercase">Cleaned</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Filters */}
+            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-stone-200 pb-4">
+              <div className="flex flex-wrap gap-2">
+                {(["all", "pending", "assigned", "cleaned"] as const).map((filter) => (
+                  <button
+                    key={filter}
+                    onClick={() => setActiveTaskFilter(filter)}
+                    className={`py-1.5 px-4 rounded-full text-xs font-bold transition-all uppercase tracking-wider cursor-pointer ${
+                      activeTaskFilter === filter
+                        ? "bg-stone-900 text-white"
+                        : "bg-stone-100 text-stone-600 hover:bg-stone-200"
+                    }`}
+                  >
+                    {filter === "all" ? "All Spots" : `${filter} spots`}
+                  </button>
+                ))}
+              </div>
+
+              <div className="text-xs text-stone-500 font-mono">
+                Showing {reports.length} citizen-reported spots in New Delhi
+              </div>
+            </div>
+
+            {/* List of Tasks */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {reports
+                .filter(r => {
+                  if (activeTaskFilter === "all") return true;
+                  if (activeTaskFilter === "pending") return r.status === "Pending";
+                  if (activeTaskFilter === "assigned") return r.status === "Assigned";
+                  if (activeTaskFilter === "cleaned") return r.status === "Cleaned";
+                  return true;
+                })
+                .map((report) => (
+                  <div
+                    key={report.id}
+                    className="bg-white rounded-3xl overflow-hidden border border-emerald-900/5 shadow-xs flex flex-col justify-between"
+                  >
+                    {/* Top image or category header */}
+                    <div className="relative aspect-video bg-stone-100 overflow-hidden">
+                      <img
+                        src={report.photoUrl}
+                        alt="reported garbage"
+                        className="w-full h-full object-cover"
+                      />
+                      <span className={`absolute top-3 right-3 text-[10px] px-2.5 py-1 rounded-full uppercase tracking-wider font-bold ${
+                        report.status === "Cleaned"
+                          ? "bg-emerald-100 text-emerald-800"
+                          : report.status === "Assigned"
+                          ? "bg-amber-100 text-amber-800"
+                          : "bg-red-100 text-red-800"
+                      }`}>
+                        {report.status}
+                      </span>
+                      <span className="absolute bottom-3 left-3 bg-stone-900/80 text-white text-[10px] font-mono px-2 py-0.5 rounded">
+                        {report.category}
+                      </span>
+                    </div>
+
+                    {/* Content body */}
+                    <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
+                      <div>
+                        <div className="flex items-start gap-1.5 text-stone-500 text-xs mb-2">
+                          <MapPin className="w-3.5 h-3.5 shrink-0 text-emerald-700" />
+                          <span className="line-clamp-1">{report.address}</span>
+                        </div>
+                        <h4 className="font-serif font-bold text-lg text-stone-900 leading-tight mb-2">
+                          {report.description}
+                        </h4>
+                        
+                        {/* Dynamic AI tip or severity indicators */}
+                        <div className="bg-emerald-50/50 rounded-xl p-3 border border-emerald-900/5 text-xs text-stone-600 space-y-2">
+                          <div className="flex justify-between font-mono text-[10px] uppercase font-bold text-emerald-800">
+                            <span>Severity: {report.severity}</span>
+                            <span>AI Confidence: {report.aiAnalysis?.confidence ? `${(report.aiAnalysis.confidence * 100).toFixed(0)}%` : "High"}</span>
+                          </div>
+                          {report.aiAnalysis?.educationalTip && (
+                            <p className="line-clamp-2 italic text-[11px] leading-relaxed">
+                              &ldquo;{report.aiAnalysis.educationalTip}&rdquo;
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Footer Actions */}
+                      <div className="pt-3 border-t border-stone-100 flex items-center justify-between">
+                        <div>
+                          <span className="block text-[10px] font-mono uppercase text-stone-400">Cleanup Reward</span>
+                          <span className="font-mono font-black text-sm text-emerald-800">+{report.pointsReward} Points</span>
+                        </div>
+
+                        {report.status === "Pending" ? (
+                          <button
+                            onClick={() => handleClaimSpot(report.id)}
+                            className="bg-emerald-800 hover:bg-emerald-900 text-white text-[11px] uppercase tracking-wider font-black px-4 py-2 rounded-xl cursor-pointer"
+                          >
+                            Claim Drive
+                          </button>
+                        ) : report.status === "Assigned" ? (
+                          report.assignedVolunteerId === userProfile.id ? (
+                            <button
+                              onClick={() => handleOpenProofModal(report)}
+                              className="bg-amber-500 hover:bg-amber-600 text-white text-[11px] uppercase tracking-wider font-black px-4 py-2 rounded-xl cursor-pointer"
+                            >
+                              Verify Cleaned
+                            </button>
+                          ) : (
+                            <span className="text-[11px] font-mono text-stone-500">
+                              Claimed by: {report.assignedVolunteerName}
+                            </span>
+                          )
+                        ) : (
+                          <div className="flex items-center gap-1 text-emerald-700 text-xs font-bold">
+                            <CheckCircle2 className="w-4 h-4" />
+                            <span>Mission Done</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+            </div>
+
+            {/* Proof of Cleanliness Submission Modal */}
+            {selectedReportForTask && (
+              <div className="fixed inset-0 bg-stone-900/70 flex items-center justify-center p-4 z-50 overflow-y-auto">
+                <div className="bg-white rounded-[2rem] max-w-lg w-full p-6 sm:p-8 space-y-6 shadow-2xl relative">
+                  
+                  <button
+                    onClick={() => setSelectedReportForTask(null)}
+                    className="absolute top-4 right-4 text-stone-400 hover:text-stone-600"
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
+
+                  <div className="border-b border-stone-100 pb-4">
+                    <span className="text-amber-600 font-mono text-[10px] uppercase tracking-wider block font-bold">Verification step</span>
+                    <h3 className="text-2xl font-serif font-bold text-stone-900">Submit Cleanup Proof</h3>
+                    <p className="text-xs text-stone-500">Upload a photograph showing the cleaned spot to claim your reward points.</p>
+                  </div>
+
+                  <div className="bg-emerald-50 rounded-xl p-3 border border-emerald-900/5 text-xs text-emerald-900 space-y-1">
+                    <p className="font-bold">Original Spot Details:</p>
+                    <p className="text-stone-600">{selectedReportForTask.address}</p>
+                    <p className="text-stone-600 font-mono italic">"{selectedReportForTask.description}"</p>
+                  </div>
+
+                  <form onSubmit={handleSubmitCleanupProof} className="space-y-4">
+                    <div>
+                      <label className="block text-xs uppercase tracking-widest text-stone-500 font-bold mb-2">
+                        Upload After-Cleaning Photo *
+                      </label>
+
+                      {proofPhoto ? (
+                        <div className="relative aspect-video rounded-2xl overflow-hidden bg-stone-100 border border-stone-200">
+                          <img
+                            src={proofPhoto}
+                            alt="clean verification"
+                            className="w-full h-full object-cover"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setProofPhoto("")}
+                            className="absolute top-3 right-3 bg-red-900 text-white p-2 rounded-full hover:bg-red-800"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="border-2 border-dashed border-stone-300 rounded-2xl p-8 text-center bg-stone-50 hover:bg-emerald-50 hover:border-emerald-600 transition-all flex flex-col items-center justify-center cursor-pointer relative">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            required
+                            onChange={handleProofPhotoUpload}
+                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                          />
+                          <Camera className="w-8 h-8 text-stone-400 mb-2" />
+                          <span className="font-serif font-bold text-xs text-stone-800 block">Select Verification Photo</span>
+                          <span className="text-[10px] text-stone-500 mt-1 block">Snap a photo of the clear street</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex gap-4">
+                      {/* Presets to test verify instantly */}
+                      <button
+                        type="button"
+                        onClick={() => setProofPhoto("https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?auto=format&fit=crop&q=80&w=600")}
+                        className="flex-1 bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs py-2.5 rounded-xl font-bold cursor-pointer"
+                      >
+                        ⚡ Use Mock Clean Photo
+                      </button>
+
+                      <button
+                        type="submit"
+                        disabled={isSubmittingProof || !proofPhoto}
+                        className={`flex-1 text-white text-xs uppercase tracking-widest font-black py-2.5 rounded-xl cursor-pointer ${
+                          isSubmittingProof || !proofPhoto
+                            ? "bg-stone-300 cursor-not-allowed"
+                            : "bg-emerald-800 hover:bg-emerald-900 shadow-md"
+                        }`}
+                      >
+                        {isSubmittingProof ? "Validating..." : "Claim Points"}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
+          </div>
+        )}
+
+        {/* --- VIEW 4: ACADEMY (EDUCATION) --- */}
+        {currentTab === "education" && (
+          <div className="space-y-8 animate-fade-in">
+            
+            {/* Header section */}
+            <div className="bg-stone-900 text-stone-100 rounded-[2rem] p-6 sm:p-8 relative overflow-hidden shadow-lg">
+              <span className="text-emerald-400 font-mono text-[10px] uppercase tracking-widest block font-bold mb-1">
+                Swachh Academy & Interactive Quiz
+              </span>
+              <h2 className="text-3xl font-serif font-black mb-3 text-white">
+                Empower Yourself With Waste Knowledge
+              </h2>
+              <p className="text-xs text-stone-300 max-w-xl leading-relaxed">
+                Cleanliness isn't just about sweeping; it is about proper circular resource management. Explore compost tutorials, master segregation, and participate in our daily trivia to earn bonus points!
+              </p>
+            </div>
+
+            {/* Split layout for Articles and Quiz */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+              
+              {/* Left side: Swachh Quiz */}
+              <div className="lg:col-span-5 bg-white border border-emerald-900/10 rounded-3xl p-6 shadow-sm space-y-6">
+                <div>
+                  <span className="text-[10px] font-mono text-emerald-800 uppercase tracking-widest block font-bold">
+                    Daily Trivia Challenge
+                  </span>
+                  <h3 className="text-xl font-serif font-bold text-stone-900">Swachh Bharat Quiz</h3>
+                </div>
+
+                {!showQuizResult ? (
+                  <div className="space-y-4">
+                    {/* Progress */}
+                    <div className="flex justify-between items-center text-xs text-stone-500 font-mono">
+                      <span>Question {quizIndex + 1} of {QUIZ_QUESTIONS.length}</span>
+                      <span>Perfect Score Bonus: +100 XP</span>
+                    </div>
+
+                    <div className="w-full bg-stone-100 h-1 rounded-full overflow-hidden">
+                      <div
+                        className="bg-emerald-700 h-full"
+                        style={{ width: `${((quizIndex + 1) / QUIZ_QUESTIONS.length) * 100}%` }}
+                      ></div>
+                    </div>
+
+                    {/* Question text */}
+                    <p className="font-serif font-bold text-lg text-stone-900 leading-snug">
+                      {QUIZ_QUESTIONS[quizIndex].question}
+                    </p>
+
+                    {/* Options list */}
+                    <div className="space-y-2.5">
+                      {QUIZ_QUESTIONS[quizIndex].options.map((opt, i) => {
+                        const isSelected = selectedQuizOption === i;
+                        const isCorrect = i === QUIZ_QUESTIONS[quizIndex].correctAnswerIndex;
+
+                        let btnStyle = "bg-stone-50 text-stone-800 border-stone-200 hover:bg-stone-100";
+                        if (quizSubmitted) {
+                          if (isCorrect) {
+                            btnStyle = "bg-emerald-100 text-emerald-900 border-emerald-400 font-semibold";
+                          } else if (isSelected) {
+                            btnStyle = "bg-red-100 text-red-900 border-red-300";
+                          } else {
+                            btnStyle = "bg-stone-50 text-stone-400 border-stone-100 opacity-60";
+                          }
+                        } else if (isSelected) {
+                          btnStyle = "bg-emerald-800 text-white border-emerald-800";
+                        }
+
+                        return (
+                          <button
+                            key={i}
+                            disabled={quizSubmitted}
+                            onClick={() => handleQuizAnswerSelect(i)}
+                            className={`w-full text-left p-3 text-xs rounded-xl border transition-all cursor-pointer flex justify-between items-center ${btnStyle}`}
+                          >
+                            <span>{opt}</span>
+                            {quizSubmitted && isCorrect && <Check className="w-4 h-4 text-emerald-700 shrink-0" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Explanation */}
+                    {quizSubmitted && (
+                      <div className="bg-emerald-50 rounded-xl p-3 border border-emerald-900/5 text-xs text-stone-600 leading-relaxed">
+                        <strong>Swachh Explanation:</strong> {QUIZ_QUESTIONS[quizIndex].explanation}
+                      </div>
+                    )}
+
+                    {/* Actions */}
+                    <div className="pt-2">
+                      {!quizSubmitted ? (
+                        <button
+                          onClick={handleQuizNext}
+                          disabled={selectedQuizOption === null}
+                          className={`w-full py-3 rounded-xl font-bold uppercase tracking-wider text-xs cursor-pointer ${
+                            selectedQuizOption === null
+                              ? "bg-stone-100 text-stone-400 cursor-not-allowed"
+                              : "bg-emerald-800 text-white hover:bg-emerald-900 shadow-sm"
+                          }`}
+                        >
+                          Submit Answer
+                        </button>
+                      ) : (
+                        <button
+                          onClick={handleNextQuestion}
+                          className="w-full bg-emerald-800 hover:bg-emerald-900 text-white py-3 rounded-xl font-bold uppercase tracking-wider text-xs cursor-pointer"
+                        >
+                          {quizIndex === QUIZ_QUESTIONS.length - 1 ? "Finish Trivia & Claim Points" : "Next Question →"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-6 space-y-4">
+                    <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center text-3xl mx-auto">
+                      🎉
+                    </div>
+                    <h4 className="text-2xl font-serif font-bold text-emerald-950">Trivia Cleared!</h4>
+                    <p className="text-xs text-stone-600">
+                      You scored <strong>{quizScore}/{QUIZ_QUESTIONS.length}</strong> correct answers! Points has been updated.
+                    </p>
+
+                    <div className="bg-emerald-50 p-4 rounded-xl text-xs font-mono text-emerald-800 font-bold">
+                      Points Claimed: +{quizScore * 20} Pts
+                    </div>
+
+                    <button
+                      onClick={restartQuiz}
+                      className="inline-block bg-emerald-800 hover:bg-emerald-900 text-white font-sans text-xs uppercase tracking-widest font-black px-6 py-2.5 rounded-xl cursor-pointer"
+                    >
+                      Retry Daily Trivia
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Right side: Educational Articles */}
+              <div className="lg:col-span-7 space-y-6">
+                <h3 className="text-xs font-sans uppercase tracking-[0.2em] font-black text-emerald-900 pl-3 border-l-4 border-emerald-600">
+                  Curated Articles & Guides
+                </h3>
+
+                <div className="space-y-4">
+                  {EDUCATION_ARTICLES.map((art) => (
+                    <div
+                      key={art.id}
+                      className="bg-white rounded-2xl border border-emerald-900/5 p-5 hover:border-emerald-900/20 transition-all shadow-xs flex flex-col justify-between"
+                    >
+                      <div>
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-[10px] uppercase font-mono tracking-widest text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-bold">
+                            {art.category}
+                          </span>
+                          <span className="text-[10px] text-stone-400 font-mono">{art.readTime}</span>
+                        </div>
+                        <h4 className="text-lg font-serif font-bold text-stone-900 leading-snug mb-1">
+                          {art.title}
+                        </h4>
+                        <p className="text-xs text-stone-500 mb-4 line-clamp-2">
+                          {art.summary}
+                        </p>
+                      </div>
+
+                      <div className="pt-3 border-t border-stone-50 flex justify-between items-center">
+                        <span className="text-[10px] text-stone-400">Swachh Certified Resource</span>
+                        <button
+                          onClick={() => setActiveArticle(art)}
+                          className="text-emerald-800 hover:text-emerald-950 text-xs font-extrabold flex items-center gap-1 cursor-pointer"
+                        >
+                          Read Article <ChevronRight className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+            </div>
+
+            {/* Read Article Modal */}
+            {activeArticle && (
+              <div className="fixed inset-0 bg-stone-900/70 flex items-center justify-center p-4 z-50 overflow-y-auto">
+                <div className="bg-white rounded-[2rem] max-w-2xl w-full p-6 sm:p-8 space-y-6 shadow-2xl relative">
+                  <button
+                    onClick={() => setActiveArticle(null)}
+                    className="absolute top-4 right-4 text-stone-400 hover:text-stone-600"
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
+
+                  <div className="border-b border-stone-100 pb-4">
+                    <span className="text-emerald-700 font-mono text-[10px] uppercase tracking-wider block font-bold">
+                      {activeArticle.category} • {activeArticle.readTime}
+                    </span>
+                    <h3 className="text-2xl font-serif font-black text-emerald-950 leading-tight">
+                      {activeArticle.title}
+                    </h3>
+                  </div>
+
+                  <div className="max-h-96 overflow-y-auto pr-2 text-xs text-stone-700 leading-relaxed whitespace-pre-line font-light space-y-4">
+                    {activeArticle.content}
+                  </div>
+
+                  <div className="bg-emerald-50 rounded-2xl p-4 flex justify-between items-center border border-emerald-900/5">
+                    <span className="text-emerald-900 text-xs">
+                      Read thoroughly? Solve Daily Trivia on the left to earn rewards!
+                    </span>
+                    <button
+                      onClick={() => {
+                        setActiveArticle(null);
+                        updatePoints(10);
+                        triggerNotification("Bonus points! 🌿", "You completed reading an educational article.");
+                      }}
+                      className="bg-emerald-800 hover:bg-emerald-900 text-white text-[10px] uppercase font-bold px-4 py-2 rounded-xl"
+                    >
+                      Acknowledge & Save
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+          </div>
+        )}
+
+        {/* --- VIEW 5: REWARDS & BADGES --- */}
+        {currentTab === "badges" && (
+          <div className="space-y-8 animate-fade-in">
+            
+            {/* User score / card panel */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-stretch">
+              
+              {/* Profile Overview */}
+              <div className="md:col-span-5 bg-emerald-900 text-white p-6 sm:p-8 rounded-[2rem] shadow-md flex flex-col justify-between">
+                <div>
+                  <div className="flex gap-4 items-center mb-6">
+                    <div className="w-14 h-14 rounded-full bg-emerald-800 border-2 border-emerald-400 flex items-center justify-center text-white font-serif text-2xl font-bold">
+                      SK
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-serif font-bold">{userProfile.name}</h3>
+                      <p className="text-[10px] text-emerald-300 font-mono">Member Since: {userProfile.joinedAt}</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div>
+                      <div className="flex justify-between text-xs text-emerald-200 mb-1">
+                        <span>Level Progress (Level {userProfile.level})</span>
+                        <span>{userProfile.points % 200} / 200 Pts to Lvl {userProfile.level + 1}</span>
+                      </div>
+                      <div className="w-full bg-emerald-950 h-2 rounded-full overflow-hidden">
+                        <div
+                          className="bg-emerald-400 h-full"
+                          style={{ width: `${((userProfile.points % 200) / 200) * 100}%` }}
+                        ></div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4 pt-2">
+                      <div className="bg-emerald-950/40 p-3 rounded-xl border border-emerald-800/50">
+                        <span className="block text-xl font-bold font-serif">{userProfile.reportsSubmitted}</span>
+                        <span className="text-[9px] text-emerald-300 uppercase">Spots Logged</span>
+                      </div>
+                      <div className="bg-emerald-950/40 p-3 rounded-xl border border-emerald-800/50">
+                        <span className="block text-xl font-bold font-serif">{userProfile.reportsCleaned}</span>
+                        <span className="text-[9px] text-emerald-300 uppercase">Spots Cleaned</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="border-t border-emerald-800/80 pt-4 mt-6 text-xs text-emerald-200">
+                  Every level up empowers your claim radius, giving you access to premium tools and faster validation services.
+                </div>
+              </div>
+
+              {/* Citizen Leaderboard */}
+              <div className="md:col-span-7 bg-white border border-emerald-900/10 rounded-[2rem] p-6 sm:p-8 shadow-sm space-y-4">
+                <div>
+                  <h3 className="text-xl font-serif font-black text-emerald-950">Swachh Leaders Hub</h3>
+                  <p className="text-xs text-stone-500">Compete with neighbors, school squads, and fellow municipal wards.</p>
+                </div>
+
+                <div className="space-y-3">
+                  {INITIAL_LEADERBOARD.map((lead) => (
+                    <div
+                      key={lead.rank}
+                      className={`flex items-center justify-between p-3 rounded-2xl border transition-all ${
+                        lead.name === "Sanjay Kumar"
+                          ? "bg-emerald-50/50 border-emerald-300"
+                          : "bg-stone-50 border-transparent hover:bg-stone-100"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${
+                          lead.rank === 1
+                            ? "bg-yellow-100 text-yellow-800"
+                            : lead.rank === 2
+                            ? "bg-stone-200 text-stone-800"
+                            : lead.rank === 3
+                            ? "bg-amber-100 text-amber-900"
+                            : "bg-white text-stone-500"
+                        }`}>
+                          {lead.rank}
+                        </span>
+                        <div>
+                          <span className="font-bold text-xs text-stone-800 block">
+                            {lead.name} {lead.name === "Sanjay Kumar" ? "(You)" : ""}
+                          </span>
+                          <span className="text-[10px] text-stone-400 font-mono">Level {lead.level}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-6 text-right">
+                        <div>
+                          <span className="block text-[9px] text-stone-400 uppercase font-mono">Badges</span>
+                          <span className="font-bold text-xs text-stone-700">{lead.badgeCount} Unlocked</span>
+                        </div>
+                        <div>
+                          <span className="block text-[9px] text-stone-400 uppercase font-mono">Points</span>
+                          <span className="font-mono font-black text-xs text-emerald-800">{lead.points} XP</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+            </div>
+
+            {/* Badges Collection Grid */}
+            <div className="space-y-4">
+              <h3 className="text-xs font-sans uppercase tracking-[0.2em] font-black text-emerald-900">
+                Swachhta Badges & Milestones
+              </h3>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-6">
+                {ALL_BADGES.map((badge) => {
+                  const isUnlocked = userProfile.unlockedBadgeIds.includes(badge.id);
+
+                  return (
+                    <div
+                      key={badge.id}
+                      className={`rounded-2xl p-5 border text-center flex flex-col items-center justify-between transition-all ${
+                        isUnlocked
+                          ? "bg-white border-emerald-900/10 shadow-xs"
+                          : "bg-stone-100/50 border-dashed border-stone-200 opacity-60"
+                      }`}
+                    >
+                      <div className="my-2">
+                        <div className={`w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-3 text-2xl transition-transform ${
+                          isUnlocked ? "bg-emerald-100 text-emerald-800 scale-105" : "bg-stone-200 text-stone-400"
+                        }`}>
+                          {badge.iconName === "Camera" && "📸"}
+                          {badge.iconName === "Trash2" && "🗑️"}
+                          {badge.iconName === "GraduationCap" && "🎓"}
+                          {badge.iconName === "Leaf" && "🌿"}
+                          {badge.iconName === "ShieldAlert" && "🛡️"}
+                          {badge.iconName === "Users" && "👥"}
+                        </div>
+                        <h4 className="font-serif font-black text-xs text-stone-900 leading-tight">
+                          {badge.name}
+                        </h4>
+                        <p className="text-[10px] text-stone-500 mt-1.5 leading-tight">
+                          {badge.description}
+                        </p>
+                      </div>
+
+                      <span className={`mt-3 block text-[9px] font-mono font-bold uppercase ${
+                        isUnlocked ? "text-emerald-700" : "text-stone-400"
+                      }`}>
+                        {isUnlocked ? "✓ UNLOCKED" : "LOCKED"}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+          </div>
+        )}
+
+        {/* --- AI GEMINI RESULT POPUP MODAL --- */}
+        {showAiAnalysisModal && aiAnalysisResult && (
+          <div className="fixed inset-0 bg-stone-900/70 flex items-center justify-center p-4 z-50 overflow-y-auto">
+            <div className="bg-white rounded-[2rem] max-w-xl w-full p-6 sm:p-8 space-y-6 shadow-2xl relative">
+              
+              <button
+                onClick={() => setShowAiAnalysisModal(false)}
+                className="absolute top-4 right-4 text-stone-400 hover:text-stone-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+
+              <div className="text-center border-b border-stone-100 pb-4">
+                <div className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 text-[10px] px-3 py-1 rounded-full font-mono uppercase tracking-wider mb-2 font-bold">
+                  <Sparkles className="w-3 h-3 text-emerald-700" />
+                  <span>Gemini AI Cleanliness Audit</span>
+                </div>
+                <h3 className="text-2xl font-serif font-black text-emerald-950">Report Categorized</h3>
+                <p className="text-xs text-stone-500">Our machine learning models has indexed the dirty spot parameters.</p>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div className="bg-stone-50 p-3 rounded-xl">
+                  <span className="block text-[9px] text-stone-400 uppercase font-mono">Detected Category</span>
+                  <span className="font-serif font-bold text-xs text-stone-900">{aiAnalysisResult.detectedCategory}</span>
+                </div>
+                <div className="bg-stone-50 p-3 rounded-xl">
+                  <span className="block text-[9px] text-stone-400 uppercase font-mono">Urgency Grading</span>
+                  <span className={`font-serif font-bold text-xs ${
+                    aiAnalysisResult.severity === "High" ? "text-red-700" : "text-stone-700"
+                  }`}>{aiAnalysisResult.severity}</span>
+                </div>
+                <div className="bg-stone-50 p-3 rounded-xl">
+                  <span className="block text-[9px] text-stone-400 uppercase font-mono">Citizen Reward</span>
+                  <span className="font-mono font-black text-xs text-emerald-800">+{aiAnalysisResult.pointsReward} XP</span>
+                </div>
+              </div>
+
+              {/* Educational tip */}
+              <div className="bg-emerald-50 rounded-2xl p-4 border border-emerald-900/5 space-y-1">
+                <span className="block text-[10px] text-emerald-800 font-mono font-bold uppercase tracking-wide">
+                  Swachh Eco-Educational Tip:
+                </span>
+                <p className="text-xs text-stone-700 leading-relaxed italic">
+                  &ldquo;{aiAnalysisResult.educationalTip}&rdquo;
+                </p>
+              </div>
+
+              {/* Action guidelines */}
+              <div className="space-y-2">
+                <span className="block text-[10px] text-stone-500 font-mono uppercase tracking-wide">
+                  Recommended Handling Protocols
+                </span>
+                <div className="space-y-1.5">
+                  {aiAnalysisResult.actionSteps.map((step, idx) => (
+                    <div key={idx} className="flex gap-2.5 items-start text-xs text-stone-600">
+                      <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 font-mono text-[10px] font-bold flex items-center justify-center shrink-0">
+                        {idx + 1}
+                      </span>
+                      <p className="leading-tight">{step}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Close Button */}
+              <button
+                onClick={() => setShowAiAnalysisModal(false)}
+                className="w-full bg-emerald-800 hover:bg-emerald-900 text-white font-sans text-xs uppercase tracking-widest font-black py-3.5 rounded-xl shadow-xs transition-colors"
+              >
+                Accept Classification & Close
+              </button>
+            </div>
+          </div>
+        )}
+
+      </div>
+
+      {/* Footer copyright */}
+      <footer className="bg-stone-100 border-t border-stone-200 mt-16 py-8">
+        <div className="max-w-7xl mx-auto px-4 text-center text-xs text-stone-400 font-mono space-y-2">
+          <p>© 2026 Swachh Bharat Clean India Initiative. Built with Gemini AI Cloud APIs.</p>
+          <p>Design inspired by Editorial Aesthetic principles.</p>
+        </div>
+      </footer>
+
+    </div>
+  );
+}
